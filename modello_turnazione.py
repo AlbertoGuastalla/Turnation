@@ -111,7 +111,7 @@ model.U = py.Param(model.P, model.D, within=py.Boolean)
 model.H = py.Param(model.T, within=py.NonNegativeReals)
 model.W = py.Param(model.F, within=py.PositiveIntegers)
 model.Q = py.Param(model.P, model.D, within=py.Boolean)
-model.SO = py.Param(model.P, within=py.Boolean)
+model.SO = py.Param(model.P, within=py.NonNegativeIntegers)
 model.OH = py.Param(model.P, within=py.NonNegativeIntegers)
 model.MH = py.Param(model.P, within=py.NonNegativeIntegers)
 model.COEFF = py.Param(model.P, model.D, within=py.NonNegativeIntegers)
@@ -134,8 +134,8 @@ def obj_func(mod):
    v1 = 0.30
    v2 = 0.05
    v3 = 0.20
-   v4 = 0.05
-   v5 = 0.40
+   v4 = 0.10
+   v5 = 0.30
    v6 = 0.05
 
    l1 = 0.80
@@ -144,7 +144,7 @@ def obj_func(mod):
 
    return v1 * mod.a +\
           v2 * sum(sum(mod.b[p, f] for f in mod.F) for p in mod.P) -\
-          v3 * sum((l1 * sum(mod.x[p, d, 1] for p in mod.P) + l2 * sum(mod.x[p, d, 2] for p in mod.P) + l3 * sum(mod.x[p, d, 3] for p in mod.P)) for d in mod.D)-\
+          v3 * sum((l1 * sum(mod.x[p, d, 1] + mod.x[p, d, 9] for p in mod.P) + l2 * sum(mod.x[p, d, 2] + mod.x[p, d, 10] for p in mod.P) + l3 * sum(mod.x[p, d, 3] for p in mod.P)) for d in mod.D)-\
           v4 * sum(sum(mod.sigma[p, d] for d in mod.D) for p in  mod.P) +\
           v5 * sum(mod.phi[f] for f in mod.F) +\
           v6 * sum(sum(mod.COEFF[p, d] * mod.x[p, d, 5] for d in mod.D) + (math.factorial(mod.d - 1) / math.factorial(mod.d - mod.OH[p] - 1) + 1) * mod.mu[p] for p in mod.P)
@@ -168,21 +168,21 @@ def minimum_night_operators(mod, d):
 model.minimum_night_operators = py.Constraint(model.D, rule=minimum_night_operators)
 
 def night_availabilty(mod, p, d):
-    if mod.SO[p] == 1:
+    if mod.SO[p] == 0:
         return mod.x[p, d, 3] <= mod.AV[p, d]
     else:
         return py.Constraint.Skip
 model.night_availabilty = py.Constraint(model.P, model.D, rule=night_availabilty)
 
 def morning_preassignment(mod, p, d):
-    if mod.SO[p] == 1:
+    if mod.SO[p] == 0:
         return mod.x[p, d, 1] >= mod.B[p, d]
     else:
         return py.Constraint.Skip
 model.morning_preassignment = py.Constraint(model.P, model.D, rule=morning_preassignment)
 
 def afternoon_preassignment(mod, p, d):
-    if mod.SO[p] == 1:
+    if mod.SO[p] == 0:
         return mod.x[p, d, 2] >= mod.O[p, d]
     else:
         return py.Constraint.Skip
@@ -215,33 +215,33 @@ def _104_law(mod, p, d):
     return mod.x[p, d, 8] == mod.L[p, d]
 model._104_law = py.Constraint(model.P, model.D, rule=_104_law)
 
-def _1C_preassignment(mod, p, d):
-    if mod.SO[p] == 1:
-        return mod.x[p, d, 12] == mod.G[p, d]
-    else:
-        return py.Constraint.Skip
-model._1C_preassignment = py.Constraint(model.P, model.D, rule=_1C_preassignment)
-
 def _1A_preassignment(mod, p, d):
     if mod.SO[p] == 1:
-        return mod.x[p, d, 9] == mod.E[p, d]
+        return mod.x[p, d, 9] >= mod.E[p, d]
     else:
         return py.Constraint.Skip
 model._1A_preassignment = py.Constraint(model.P, model.D, rule=_1A_preassignment)
 
 def _2A_preassignment(mod, p, d):
-    if mod.SO[p] == 1:
-        return mod.x[p, d, 10] == mod.R[p, d]
+    if mod.SO[p] == 2:
+        return mod.x[p, d, 10] >= mod.R[p, d]
     else:
         return py.Constraint.Skip
 model._2A_preassignment = py.Constraint(model.P, model.D, rule=_2A_preassignment)
 
 def _1B_preassignment(mod, p, d):
-    if mod.SO[p] == 1:
-        return mod.x[p, d, 11] == mod.U[p, d]
+    if mod.SO[p] == 3:
+        return mod.x[p, d, 11] >= mod.U[p, d]
     else:
         return py.Constraint.Skip
 model._1B_preassignment = py.Constraint(model.P, model.D, rule=_1B_preassignment)
+
+def _1C_preassignment(mod, p, d):
+    if mod.SO[p] == 4:
+        return mod.x[p, d, 12] >= mod.G[p, d]
+    else:
+        return py.Constraint.Skip
+model._1C_preassignment = py.Constraint(model.P, model.D, rule=_1C_preassignment)
 
 def uniqueness_workshift(mod, p, d):
    return sum(mod.x[p, d, t] for t in mod.T) == 1
@@ -364,55 +364,37 @@ def feasibility_night(mod, p):
 model.feasibility_night = py.Constraint(model.P, rule=feasibility_night)
 
 def max_mornings_number(mod, p):
-    if mod.SO[p] == 0:
-        return mod.phi[1] >= sum(mod.x[p, d, 1] for d in mod.D)
-    else:
-        return py.Constraint.Skip
+    return mod.phi[1] >= sum(mod.x[p, d, 1] for d in mod.D)
 model.max_mornings_number = py.Constraint(model.P, rule=max_mornings_number)
 
 def max_afternoons_number(mod, p):
-    if mod.SO[p] == 0:
-        return mod.phi[2] >= sum(mod.x[p, d, 2] for d in mod.D)
-    else:
-        return py.Constraint.Skip
+    return mod.phi[2] >= sum(mod.x[p, d, 2] for d in mod.D)
 model.max_afternoons_number = py.Constraint(model.P, rule=max_afternoons_number)
 
 def max_nights_number(mod, p):
-    if mod.SO[p] == 0:
-        return mod.phi[3] >= sum(mod.x[p, d, 3] for d in mod.D)
-    else:
-        return py.Constraint.Skip
+    return mod.phi[3] >= sum(mod.x[p, d, 3] for d in mod.D)
 model.max_nights_number = py.Constraint(model.P, rule=max_nights_number)
 
 def get_more_five_consecutive_working_days1(mod, p, d):
-    if mod.SO[p] == 0:
-        if d <= mod.d - 5:
-            return sum(sum(mod.x[p, l, t] for t in range(1, 4)) for l in range(d, d + 6)) >= 6 * mod.k[p, d]
-        else:
-            return py.Constraint.Skip
+    if d <= mod.d - 5:
+        return sum(sum(mod.x[p, l, t] for t in {1, 2, 3, 9, 10, 11, 12}) for l in range(d, d + 6)) >= 6 * mod.k[p, d]
     else:
         return py.Constraint.Skip
 model.get_more_five_consecutive_working_days1 = py.Constraint(model.P, model.D, rule=get_more_five_consecutive_working_days1)
 
 def get_more_five_consecutive_working_days2(mod, p, d):
-    if mod.SO[p] == 0:
-        if d <= mod.d - 5:
-            return sum(sum(mod.x[p, l, t] for t in range(1, 4)) for l in range(d, d + 6)) - 5 <= 6 * mod.k[p, d]
-        else:
-            return py.Constraint.Skip
+    if d <= mod.d - 5:
+        return sum(sum(mod.x[p, l, t] for t in {1, 2, 3, 9, 10, 11, 12}) for l in range(d, d + 6)) - 5 <= 6 * mod.k[p, d]
     else:
         return py.Constraint.Skip
 model.get_more_five_consecutive_working_days2 = py.Constraint(model.P, model.D, rule=get_more_five_consecutive_working_days2)
 
 def no_more_five_consecutive_working_days(mod, p, d):
-    if mod.SO[p] == 0:
-        return sum(sum(mod.k[p, d] for p in mod.P) for d in mod.D) == 0
-    else:
-        return py.Constraint.Skip
+    return sum(sum(mod.k[p, d] for p in mod.P) for d in mod.D) == 0
 model.no_more_five_consecutive_working_days = py.Constraint(model.P, model.D, rule=no_more_five_consecutive_working_days)
 
 def monthly_debt(mod, p):
-    return mod.y[p] >= mod.wh * (1 - mod.SO[p])
+    return mod.y[p] >= mod.wh
 model.monthly_debt = py.Constraint(model.P, rule=monthly_debt)
 
 def total_holidays(mod, p):
@@ -423,13 +405,40 @@ def feasibility_holidays(mod, p):
      return mod.mu[p] <= mod.OH[p]
 model.feasibility_holidays = py.Constraint(model.P, rule=feasibility_holidays)
 
-def operators_constraints1(mod, p, d):
-    return mod.x[p, d, 1] + mod.x[p, d, 2] + mod.x[p, d, 3] <= (1 - mod.SO[p])
-model.operators_constraints1 = py.Constraint(model.P, model.D, rule=operators_constraints1)
+def normal_operators_constraints(mod, p, d):
+    if mod.SO[p] == 0:
+        return sum(mod.x[p, d, t] for t in mod.T - {1, 2, 3, 4, 5, 6, 7, 8}) == 0
+    else:
+        return py.Constraint.Skip
+model.normal_operators_constraints = py.Constraint(model.P, model.D, rule=normal_operators_constraints)
 
-def operators_constraints2(mod, p, d):
-    return mod.x[p, d, 9] + mod.x[p, d, 10] + mod.x[p, d, 11] + mod.x[p, d, 12] <= mod.SO[p]
-model.operators_constraints2 = py.Constraint(model.P, model.D, rule=operators_constraints2)
+def special_operators_constraints1A(mod, p, d):
+    if mod.SO[p] == 1:
+        return sum(mod.x[p, d, t] for t in mod.T - {4, 5, 6, 7, 8, 9}) == 0
+    else:
+        return py.Constraint.Skip
+model.special_operators_constraints1A = py.Constraint(model.P, model.D, rule=special_operators_constraints1A)
+
+def special_operators_constraints2A(mod, p, d):
+    if mod.SO[p] == 2:
+        return sum(mod.x[p, d, t] for t in mod.T - {4, 5, 6, 7, 8, 10}) == 0
+    else:
+        return py.Constraint.Skip
+model.special_operators_constraints2A = py.Constraint(model.P, model.D, rule=special_operators_constraints2A)
+
+def special_operators_constraints1B(mod, p, d):
+    if mod.SO[p] == 3:
+        return sum(mod.x[p, d, t] for t in mod.T - {4, 5, 6, 7, 8, 11}) == 0
+    else:
+        return py.Constraint.Skip
+model.special_operators_constraints1B = py.Constraint(model.P, model.D, rule=special_operators_constraints1B)
+
+def special_operators_constraints1C(mod, p, d):
+    if mod.SO[p] == 4:
+        return sum(mod.x[p, d, t] for t in mod.T - {4, 5, 6, 7, 8, 12}) == 0
+    else:
+        return py.Constraint.Skip
+model.special_operators_constraints1C = py.Constraint(model.P, model.D, rule=special_operators_constraints1C)
 
 # ottimizzazione
 def minimize(dataDict, outfile, solverfile):
@@ -439,7 +448,7 @@ def minimize(dataDict, outfile, solverfile):
    workshifts = {}
    instance = model.create_instance(dataDict)
    opt = py.SolverFactory(solver_name, executable=solver_path)
-   opt.options['timelimit'] = 100
+   opt.options['timelimit'] = 600
    start = time.time()
    opt.solve(instance, tee=True, logfile=solverfile)
    end = time.time()
